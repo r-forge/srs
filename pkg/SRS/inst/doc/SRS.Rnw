@@ -1,0 +1,429 @@
+% -*- mode: noweb; noweb-default-code-mode: R-mode; -*-
+\documentclass[11pt, letter]{article}
+
+%%%
+%%% For future reference
+%%%\documentclass[8pt]{article}
+%%%\usepackage[landscape]{typearea}
+%%% Set my margins
+%%%\setlength{\oddsidemargin}{0.0truein}
+%%%\setlength{\evensidemargin}{0.0truein}
+%%%\setlength{\textwidth}{9truein}
+%%%\setlength{\topmargin}{0.0truein}
+%%%\setlength{\textheight}{6.5truein}
+%%%\setlength{\headsep}{0.0truein}
+%%%\setlength{\headheight}{0.0truein}
+%%%\setlength{\topskip}{0pt}
+%%%
+
+%% Set my margins
+
+\setlength{\oddsidemargin}{0.0truein}
+\setlength{\evensidemargin}{0.0truein}
+\setlength{\textwidth}{6.5truein}
+\setlength{\topmargin}{0.0truein}
+\setlength{\textheight}{9.0truein}
+\setlength{\headsep}{0.0truein}
+\setlength{\headheight}{0.0truein}
+\setlength{\topskip}{0pt}
+%% End of margins
+
+%%\pagestyle{myheadings}
+%%\markboth{$Date$\hfil$Revision$}{\thepage}
+
+%\VignetteIndexEntry{Subject Randomization System}
+\usepackage{amsmath, amsfonts, amssymb}
+
+\newcommand\calF{\mathcal{F}}
+\newcommand\calC{\mathcal{C}}
+\newcommand\yidotbar{\bar{y}_{i.}^{(s)}}
+\newcommand\ydotdotbar{\bar{y}_{..}^{(s)}}
+\newcommand\sidotbar{\bar{S}_{i.}^{(s)}}
+\newcommand\sdotdotbar{\bar{S}_{..}^{(s)}}
+\newcommand\yij{y_{ij}^{(s)}}
+\newcommand\eij{e_{ij}^{(s)}}
+\newcommand\tij{t_{ij}^{(s)}}
+
+\numberwithin{equation}{section}
+%%\renewcommand{\textfraction}{0.0}
+%%\renewcommand{\topfraction}{0.9}
+%%\renewcommand{\bottomfraction}{0.9}
+%%\renewcommand{\floatpagefraction}{0.9}
+\usepackage{float}
+\usepackage{rotating}
+
+\title{SRS: A Subject Randomization System}
+\author{Balasubramanian Narasimhan}
+
+\date{$Revision$ of $Date$}
+
+\SweaveOpts{echo=TRUE, prefix.string=figs/prs}
+
+\begin{document}
+
+\maketitle
+\tableofcontents
+
+\section{Introduction}
+\label{sec:intro}
+
+SRS is a Subject Randomization System based on the paper by Pocock and
+Simon (\cite{ps:1975}. It follows the development in the paper rather
+closely. In this vignette we show how one might use the system in
+designing and implementing randomizations for clinical trials. 
+
+This vignette has two parts to it. The first part goes into detail
+discussing some of the innards of the package. This is most meaningful
+to those in our Biostatistics core who may recommend this software for
+use in trials.  The second part is more of a HOWTO for conducting a
+trial.
+
+This package is written using S4 classes. No deep knowledge of S4
+classes is assumed in what follows.
+
+To use the package, we first attach it.
+
+<<Library SRS>>=
+library(SRS)
+@ 
+
+\section{The Basic Classes}
+\label{sec:basic-classes}
+There are two main classes that most users of the package will use:
+\texttt{ClinicalExperiment} and \texttt{PocockSimonRandomizer}. The
+class \texttt{ClinicalExperiment}, as the name implies, encapsulates
+the characteristics of a clinical experiment. An instance of this
+class is used to create an instance of the other class
+\texttt{PocockSimonRandomizer} so that the randomizer remains
+associated with a particular clinical experiment.
+
+\section{A Simple Example}
+\label{sec:simple-example}
+
+\subsection{A Clinical Experiment}
+\label{sec:clin-expt}
+
+Let us create a simple clinical experiment object after invoking the
+requisite package. The function \texttt{ClinicalExperiment} (as
+distinct from the \texttt{ClinicalExperiment} class) is available for
+us. 
+
+<<Ex1>>=
+expt0 <- ClinicalExperiment(number.of.factors = 3,
+                            number.of.factor.levels = c(2, 2, 3),
+                            number.of.treatments = 3)
+@ 
+
+This create an experiment with three factors and three treatments. The
+first factor has 2 levels, the second 2, and the third 3. If none of
+the arguments are specified, the default is to create a two-factor,
+two-treatment experiment with each factor having two levels. One can
+name the factors with the argument \texttt{factor.names} but default
+names such as $F_1, F_2,\ldots$ are provided. The levels are currently
+indicated by the suffixes \texttt{-1}, \texttt{-2}, etc., that are
+attached to the factor names; a flexible naming scheme for this might
+be introduced later.
+
+It is useful to print the object to see what it contains.
+<<Ex1>>=
+print(expt0)
+@ 
+
+Of course, in anything other than a toy setting, one actually provides
+some names for the factor and factor levels. We'll use this in what
+follows. 
+
+<<Ex2>>=
+expt <- ClinicalExperiment(number.of.factors = 3,
+                           factor.names = c("Sex", "Race", "Stage"),
+                           number.of.factor.levels = c(2, 2, 3),
+                            factor.level.names =
+                            list(c("Female", "Male"),
+                                 c("Caucasian", "Non-caucasian"),
+                                 c("I", "II", "III")),
+                            number.of.treatments = 3,
+                            treatment.names <- c("Placebo", "Arm1", "Arm2"))
+print(expt)
+@ 
+
+\subsection{The PocockSimon Randomizer}
+\label{sec:ps-randomizer}
+
+Now let's create a randomizer that will work for this experiment.
+
+<<Ex1>>=
+r.obj <- new("PocockSimonRandomizer", expt, as.integer(12345))
+print(r.obj)
+@ 
+
+Note that we don't have a helper constructor function (for no
+particular reason) and so we had to use the \texttt{new} function to
+create the object. (Indeed, that is what the
+\texttt{ClinicalExperiment} function does behind the scenes.)
+ 
+The output of the print above indicates that there are some default
+settings for the randomizer. For example, the treatment ratios are all
+1's indicating equal treatment preference; others such as \texttt{1 2
+  1} could have been specified. Note the \texttt{stateTable} slot
+which will summarize the margins of the factor distributions by
+treatment. Since no randomization has been done, the slot
+\texttt{tr.assignments} is empty. 
+
+Of interest are the slots named \texttt{d.func}, \texttt{g.func} and
+\texttt{p.func}. The \texttt{d.func} computes
+imbalance due to assigning each of the treatments, \texttt{g.func}
+computes the overall imbalance, and the \texttt{p.func} computes the
+probabilities of assigning each treatment based on the overall
+imbalance. All of these can be changed by the user. Default values for
+these functions are the ones described in \cite{ps:1975}. 
+
+\subsection{Using the Randomizer}
+\label{sec:using}
+
+Now that we have defined the experiment and the randomizer, we can
+randomize several subjects using these classes. First some helper
+functions that are useful in simulations.
+
+<<Ex1>>=
+###
+### Generate a random Id for a subject (max 10000000)!
+###
+generateId <- function(i) {
+  if (i < 0 || i > 10000) {
+    stop("generateId: Arg expected to be between 1 and 9999")
+  }
+  zero.count <- 5 - trunc(log10(i)) - 1
+  prefix <- substring(10^zero.count, 2)
+  paste("ID.", prefix, i, sep="")
+}
+
+###
+### Generate random factors; if n is the number of factors, limits is a list
+### of length n with each element being a vector of possible factor levels
+###
+generateRandomFactors <- function(factor.levels) {
+  unlist(lapply(factor.levels, function(x) sample(x, 1)))
+}
+@ 
+
+Now, we will run a 10 randomizations and print the results.
+
+<<Ex1>>=
+for (i in 1:10)
+  r.obj <- randomize(r.obj, generateId(i), 
+                     generateRandomFactors(expt@factor.level.names))
+print(r.obj@tr.assignments)
+@
+
+Just in case we are only interested in the last assigned treatment:
+
+<<Ex1>>=
+lastRandomization(r.obj)
+@ 
+
+We can also look at the marginal distributions thus:
+
+<<Ex1>>=
+print(r.obj@stateTable)
+@ 
+
+\section{Customizing the Randomizer}
+\label{sec:customization}
+
+The functions for computing imbalance, overall imbalance and
+probabilities can all be customized. These are best illustrated by
+additional examples.
+
+\subsection{A different imbalance function}
+\label{sec:diff-imbalance}
+
+Let's move away from the default range function to say the standard
+deviation (\texttt{sd}) function.
+
+<<Ex2>>=
+r.obj.2 <- new("PocockSimonRandomizer", expt, as.integer(12345),
+               d.func=sd)
+print(r.obj.2@d.func)
+@ 
+
+Now let's run that simulation again.
+<<Ex2>>=
+for (i in 1:10)
+    r.obj.2 <- randomize(r.obj.2, generateId(i), 
+                         generateRandomFactors(expt@factor.level.names))
+print(r.obj.2@tr.assignments)
+@ 
+
+Now print the summaries.
+
+<<Ex2>>=
+print(table(r.obj@tr.assignments[, "Treatment"]))
+print(r.obj@stateTable)
+@ 
+
+\subsection{Weighting factors differently}
+\label{sec:weight-factors}
+
+Now let's weight imbalance on factor 1 more than the others by a
+factor of 5. We do this by modifying the \texttt{g.func}.
+
+<<Ex3>>=
+## Note: imbalances is a number of factors by number of treatments matrix
+g.func <- function(imbalances) {
+    factor.weights <- c (5, 1, 1)
+    imbalances %*% factor.weights
+}
+r.obj.3 <- new("PocockSimonRandomizer", expt, as.integer(12345),
+               d.func=sd, g.func=g.func)
+print(r.obj.3@g.func)
+@ 
+
+Now the simulation.
+
+<<Ex3>>=
+for (i in 1:1000)
+    r.obj.3 <- randomize(r.obj.3, generateId(i), 
+                         generateRandomFactors(expt@factor.level.names))
+@ 
+
+Let's look at the distribution of treatments and the marginal
+distribution of factors.
+
+<<Ex3>>=
+print(table(r.obj.3@tr.assignments[, "Treatment"]))
+print(r.obj.3@stateTable)
+@ 
+
+\subsection{Unequal treatment assignments}
+\label{sec:unequal-randomization}
+
+Next, we try a simulation where we require 5:2:1 randomization. To
+really see the effect, we need to change the function that computes
+probabilities for picking each treatment based on the
+randomization. Let's be greedy and use the following:
+
+<<Ex4>>=
+p.func.greedy <- function(overallImbalance) {
+    number.of.treatments <- length(overallImbalance)
+    k <- which(overallImbalance == min(overallImbalance))
+    ## Note there could be ties here...
+    p.vec <- rep(0, number.of.treatments)
+    p.vec[k] <- 1
+    p.vec/sum(p.vec) ## will pick ties randomly
+}
+@ 
+
+Now, a new randomizer.
+
+<<Ex4>>=
+r.obj.4 <- new("PocockSimonRandomizer", expt, as.integer(12345),
+               tr.ratios=c(5,2,1), p.func=p.func.greedy)
+@ 
+
+A simulation.
+
+<<Ex4>>=
+for (i in 1:1000)
+    r.obj.4 <- randomize(r.obj.4, generateId(i), 
+                         generateRandomFactors(expt@factor.level.names))
+@ 
+
+<<Ex4>>=
+print(table(r.obj.4@tr.assignments[, "Treatment"]))
+print(r.obj.4@stateTable)
+@ 
+
+\subsection{A different probability assignment}
+\label{sec:diff-prob}
+
+The drawback of using the greedy function in the previous example is
+that there is some predictability as to what the randomizer will
+assign based on the current state.  To throw in a bit of uncertainty,
+we can define another function that favors the appropriate treatment
+heavily, but not deterministically.
+
+<<Ex5>>=
+p.func.not.so.greedy <- function(overallImbalance) {
+    FAVORED.PROB <- 0.75
+    number.of.treatments <- length(overallImbalance)
+    k <- which(overallImbalance == min(overallImbalance))
+    if (length(k) > 1) {
+        k <- sample(k, 1)
+    }
+    p.vec <- rep((1-FAVORED.PROB)/(number.of.treatments-1), number.of.treatments)
+    p.vec[k] <- FAVORED.PROB
+    p.vec
+}
+@ 
+
+<<Ex5>>=
+r.obj.5 <- new("PocockSimonRandomizer", expt, as.integer(12345),
+               tr.ratios=c(5,2,1), p.func=p.func.not.so.greedy)
+@ 
+
+A simulation.
+
+<<Ex5>>=
+for (i in 1:1000)
+    r.obj.5 <- randomize(r.obj.5, generateId(i), 
+                         generateRandomFactors(expt@factor.level.names))
+@ 
+
+<<Ex5>>=
+print(table(r.obj.5@tr.assignments[, "Treatment"]))
+print(r.obj.5@stateTable)
+@ 
+
+Another possibility for the probability function might be based on the
+actual imbalances.
+
+<<Another probability function>>=
+p.func.imbalance <- function(overallImbalance) {
+    p.vec <- overallImbalance/sum(overallImbalance)
+    p.vec
+}
+@ 
+
+Of course, this assumes that the imbalances calculated are
+non-negative, which would be the case with range or standard
+deviation. But some care must be taken to ensure this is the case for
+arbitrary situations.
+
+\section{Notes}
+\label{sec:notes}
+
+The current package can be used without recourse to a database for
+persistence.  This would require the initial definition of the
+clinical experiment as in the example(s) above along with the
+randomizer. This is done once for a study on a designated computer
+running R to which the person assigned to do the randomization will
+have primary access. 
+
+Thereafter, every time a subject is to be randomized (after all the
+usual procedures for registration in the study) the randomization
+process will require merely an id for the subject and the levels of
+the prognostic factors of interest. The randomization is performed
+simply by running the code snippet
+
+\begin{verbatim}
+r.obj <- randomize(r.obj, id, c(fac1, fac2, fac3))
+lastRandomization(r.obj)
+\end{verbatim}
+
+where \texttt{r.obj} is a randomizer created as above, and
+\texttt{id}, \texttt{fac1}, \texttt{fac2}, \texttt{fac3}, are the
+study id and the associated factor levels of the subject to be
+randomized. 
+
+After each assignment, the person can save the R workspace so that the
+state is preserved.  If R is invoked from the same directory again,
+the state is restored for subsequent randomizations. Of course, this
+means all the usual responsibilities for saving the workspace apply
+for this mode of operation. 
+
+\bibliographystyle{plain}
+
+\bibliography{SRS}
+
+
+\end{document}
